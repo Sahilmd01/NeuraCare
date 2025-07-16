@@ -1,97 +1,158 @@
 import React, { useContext, useEffect, useState } from 'react'
 import { AppContext } from '../context/AppContext'
-import axios from 'axios';
-import {toast} from 'react-toastify';
-import { useNavigate } from 'react-router-dom';
+import axios from 'axios'
+import { toast } from 'react-toastify'
+import { useNavigate } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
+import { FiMail, FiLock, FiUser, FiArrowRight } from 'react-icons/fi'
 
 const Login = () => {
-  const {backendUrl,setToken,token}=useContext(AppContext);
-  const [state,setState]=useState("signup")
-  const [email,setEmail]=useState("")
-  const [password,setPassword]=useState("")
-  const [name,setName]=useState("")
-  const navigate=useNavigate()
+  const { backendUrl, setToken, token } = useContext(AppContext)
+  const [state, setState] = useState("signup")
+  const [form, setForm] = useState({ name: "", email: "", password: "" })
+  const [isLoading, setIsLoading] = useState(false)
+  const navigate = useNavigate()
 
-  const onSubmitHandler = async(event) =>{
-     event.preventDefault()
-     try {
-       if(state==="signup"){
-        const {data}=await axios.post(backendUrl+"/api/user/register",{name,email,password});
-        console.log("data",data)
-        console.log("data2",data.success)
-        if(data.success){
-          localStorage.setItem("token",data.token);
-          setToken(data.token);
-          
-          toast.success("Account created successfully")
-         
-        }else{
-          toast.error("Account creation failed. Please try again.");
-
-        }
-       }else{
-        const {data}=await axios.post(backendUrl+"/api/user/login",{email,password});
-        if(data.success){
-          localStorage.setItem("token",data.token);
-          setToken(data.token);
-         
-         
-          toast.success("Logged in successfully")
-         
-        
-        }else{
-          toast.error("Login failed: " + data.message);
-
-        }
-         
-
-       }
-     } catch (error) {
-         toast.error(`Error during ${state === "signup" ? "sign up" : "login"}. Please try again.`);
-
-         console.log("Error in creating account",error.message);
-     }
-
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setIsLoading(true)
+    try {
+      const endpoint = state === "signup" ? "/register" : "/login"
+      const { data } = await axios.post(`${backendUrl}/api/user${endpoint}`, form)
+      if (data.success) {
+        localStorage.setItem("token", data.token)
+        setToken(data.token)
+        toast.success(`Account ${state === "signup" ? "created" : "logged in"} successfully`)
+      }
+    } catch (error) {
+      toast.error(`Error during ${state === "signup" ? "sign up" : "login"}`)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  useEffect(()=>{
-      if(token){
-        navigate("/")
-      }
-  },[token])
+  useEffect(() => {
+    if (token) navigate("/")
+  }, [token])
 
   return (
-    <form onSubmit={onSubmitHandler} className='min-h-80vh flex items-center'>
-        <div className="flex flex-col mt-10 gap-3 m-auto items-start p-8 min-w-[340px] sm:min-w-96 border rounded-2xl text-zinc-600 text-sm shadow-lg bg-white">
-        <p className='text-2xl font-bold '>{state==="signup"?"Create Account":"Login"}</p>
-        <p>Please {state === "signup" ? "sign up" : "log in"} to book an appointment</p>
-
-        {
-          state==="signup" && 
-          <div className='w-full'>
-            <p>Full Name</p>
-           <input className='border border-zinc-300 rounded w-full p-2 mt-1' type="text" onChange={(e)=>setName(e.target.value)} value={name} required/>
-        </div>
-        }
+    <div
+      className="min-h-screen flex items-center justify-center bg-cover bg-center px-4"
+      style={{ backgroundImage: 'url("/bg.png")' }} // <-- Background image here
+    >
+      <div className="flex flex-col md:flex-row w-full max-w-5xl bg-white rounded-lg shadow-lg overflow-hidden">
         
-        <div className='w-full'>
-          <p>Email</p>
-          <input type="text" className='border border-zinc-300 rounded w-full p-2 mt-1' onChange={(e)=>setEmail(e.target.value)} value={email} required/>
+        {/* Left side image placeholder */}
+        <div className="md:w-1/2 h-48 md:h-auto bg-gray-200 relative">
+          <AnimatePresence mode="wait">
+            <motion.img
+              key={state}
+              src={`/login_bg.png`} // Optional: show same background in left panel too
+              alt={state}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          </AnimatePresence>
         </div>
-        <div className='w-full'>
-          <p>Password</p>
-          <input type="password" className='border border-zinc-300 rounded w-full p-2 mt-1' onChange={(e)=>setPassword(e.target.value)} value={password} required/>
-        </div>
-        <button type="submit" className='bg-primary rounded w-full py-2 text-white'>{state==="signup"?"Sign Up" : "Login"}</button>
-        {
-          state==="signup"
-          ?<p>Already have an account ? <span onClick={()=>setState('login')} className='text-primary underline cursor-pointer'>Login here</span></p>
-          :<p>Create an new account? <span onClick={()=>setState('signup')} className='text-primary underline cursor-pointer'>click here</span></p>
 
-        }
+        {/* Right side form */}
+        <div className="w-full md:w-1/2 p-8 flex items-center justify-center">
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="w-full max-w-md"
+          >
+            <div className="text-center mb-6">
+              <div className="bg-indigo-100 inline-flex p-3 rounded-full mb-4">
+                <FiArrowRight className="text-indigo-600 text-xl" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-800">
+                {state === "signup" ? "Patient Registration" : "Welcome Back"}
+              </h2>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {state === "signup" && (
+                <div className="relative">
+                  <FiUser className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Full Name"
+                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    required
+                  />
+                </div>
+              )}
+
+              <div className="relative">
+                <FiMail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <input
+                  type="email"
+                  placeholder="Email"
+                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="relative">
+                <FiLock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <input
+                  type="password"
+                  placeholder="Password"
+                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none"
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className={`w-full py-2 px-4 bg-indigo-600 text-white rounded-lg ${
+                  isLoading ? "opacity-80" : "hover:bg-indigo-700"
+                }`}
+              >
+                {isLoading ? "Processing..." : state === "signup" ? "Register" : "Login"}
+              </button>
+
+              <div className="text-center text-sm text-gray-600 mt-2">
+                {state === "signup" ? (
+                  <p>
+                    Have an account?{" "}
+                    <button
+                      type="button"
+                      onClick={() => setState("login")}
+                      className="text-indigo-600 underline"
+                    >
+                      Login
+                    </button>
+                  </p>
+                ) : (
+                  <p>
+                    New patient?{" "}
+                    <button
+                      type="button"
+                      onClick={() => setState("signup")}
+                      className="text-indigo-600 underline"
+                    >
+                      Register
+                    </button>
+                  </p>
+                )}
+              </div>
+            </form>
+          </motion.div>
+        </div>
       </div>
-
-    </form>
+    </div>
   )
 }
 
