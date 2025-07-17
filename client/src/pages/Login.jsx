@@ -23,6 +23,8 @@ const Login = () => {
         localStorage.setItem("token", data.token)
         setToken(data.token)
         toast.success(`Account ${state === "signup" ? "created" : "logged in"} successfully`)
+      } else {
+        toast.error(data.message)
       }
     } catch (error) {
       toast.error(`Error during ${state === "signup" ? "sign up" : "login"}`)
@@ -38,7 +40,7 @@ const Login = () => {
   return (
     <div
       className="min-h-screen flex items-center justify-center bg-cover bg-center px-4"
-      style={{ backgroundImage: 'url("/bg.png")' }} // <-- Background image here
+      style={{ backgroundImage: 'url("/bg.png")' }}
     >
       <div className="flex flex-col md:flex-row w-full max-w-5xl bg-white rounded-lg shadow-lg overflow-hidden">
         
@@ -47,7 +49,7 @@ const Login = () => {
           <AnimatePresence mode="wait">
             <motion.img
               key={state}
-              src={`/login_bg.png`} // Optional: show same background in left panel too
+              src={`/login_bg.png`}
               alt={state}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -70,8 +72,11 @@ const Login = () => {
                 <FiArrowRight className="text-indigo-600 text-xl" />
               </div>
               <h2 className="text-2xl font-bold text-gray-800">
-                {state === "signup" ? "Patient Registration" : "Welcome Back"}
+                {state === "signup" ? "Create Account" : "Login"}
               </h2>
+              <p className="text-gray-600 mt-2">
+                Please {state === "signup" ? "sign up" : "log in"} to book appointment
+              </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -120,30 +125,30 @@ const Login = () => {
                   isLoading ? "opacity-80" : "hover:bg-indigo-700"
                 }`}
               >
-                {isLoading ? "Processing..." : state === "signup" ? "Register" : "Login"}
+                {isLoading ? "Processing..." : state === "signup" ? "Create account" : "Login"}
               </button>
 
               <div className="text-center text-sm text-gray-600 mt-2">
                 {state === "signup" ? (
                   <p>
-                    Have an account?{" "}
+                    Already have an account?{" "}
                     <button
                       type="button"
                       onClick={() => setState("login")}
                       className="text-indigo-600 underline"
                     >
-                      Login
+                      Login here
                     </button>
                   </p>
                 ) : (
                   <p>
-                    New patient?{" "}
+                    Create a new account?{" "}
                     <button
                       type="button"
                       onClick={() => setState("signup")}
                       className="text-indigo-600 underline"
                     >
-                      Register
+                      Click here
                     </button>
                   </p>
                 )}
