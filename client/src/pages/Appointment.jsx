@@ -1,399 +1,290 @@
-import React, { useContext, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { AppContext } from '../context/AppContext';
-import axios from 'axios';
-import { toast } from 'react-toastify';
-import { assets } from '../assets/assets';
-import { motion, AnimatePresence } from 'framer-motion';
-import { FiCalendar, FiClock, FiMapPin, FiCheckCircle, FiXCircle, FiDollarSign, FiChevronDown } from 'react-icons/fi';
+import React, { useContext, useEffect, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { AppContext } from '../context/AppContext'
+import { assets } from '../assets/assets'
+import RelatedDoctors from '../components/RelatedDoctors'
+import axios from 'axios'
+import { toast } from 'react-toastify'
+import { motion } from 'framer-motion'
 
-const MyAppointments = () => {
-    const { backendUrl, token } = useContext(AppContext);
-    const navigate = useNavigate();
+const Appointment = () => {
+    const { docId } = useParams()
+    const { doctors, currencySymbol, backendUrl, token, getDoctosData } = useContext(AppContext)
+    const daysOfWeek = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 
-    const [appointments, setAppointments] = useState([]);
-    const [payment, setPayment] = useState('');
-    const [isLoading, setIsLoading] = useState(true);
-    const [expandedAppointment, setExpandedAppointment] = useState(null);
+    const [docInfo, setDocInfo] = useState(false)
+    const [docSlots, setDocSlots] = useState([])
+    const [slotIndex, setSlotIndex] = useState(0)
+    const [slotTime, setSlotTime] = useState('')
+    const [isLoading, setIsLoading] = useState(true)
 
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const navigate = useNavigate()
 
-    const slotDateFormat = (slotDate) => {
-        const dateArray = slotDate.split('_');
-        return `${dateArray[0]} ${months[Number(dateArray[1]) - 1]} ${dateArray[2]}`;
-    };
+    const fetchDocInfo = async () => {
+        const docInfo = doctors.find((doc) => doc._id === docId)
+        setDocInfo(docInfo)
+        setIsLoading(false)
+    }
 
-    const getUserAppointments = async () => {
-        try {
-            setIsLoading(true);
-            const { data } = await axios.get(`${backendUrl}/api/user/appointments`, { headers: { token } });
-            setAppointments(data.appointments.reverse());
-        } catch (error) {
-            console.error(error);
-            toast.error(error.message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
+    const getAvailableSolts = async () => {
+        setDocSlots([])
+        let today = new Date()
 
-    const cancelAppointment = async (appointmentId) => {
-        try {
-            const { data } = await axios.post(
-                `${backendUrl}/api/user/cancel-appointment`,
-                { appointmentId },
-                { headers: { token } }
-            );
+        for (let i = 0; i < 7; i++) {
+            let currentDate = new Date(today)
+            currentDate.setDate(today.getDate() + i)
 
-            if (data.success) {
-                toast.success(data.message);
-                getUserAppointments();
+            let endTime = new Date()
+            endTime.setDate(today.getDate() + i)
+            endTime.setHours(21, 0, 0, 0)
+
+            if (today.getDate() === currentDate.getDate()) {
+                currentDate.setHours(currentDate.getHours() > 10 ? currentDate.getHours() + 1 : 10)
+                currentDate.setMinutes(currentDate.getMinutes() > 30 ? 30 : 0)
             } else {
-                toast.error(data.message);
+                currentDate.setHours(10)
+                currentDate.setMinutes(0)
             }
-        } catch (error) {
-            console.error(error);
-            toast.error(error.message);
-        }
-    };
 
-    const initPay = (order) => {
-        const options = {
-            key: import.meta.env.VITE_RAZORPAY_KEY_ID,
-            amount: order.amount,
-            currency: order.currency,
-            name: 'Appointment Payment',
-            description: "Appointment Payment",
-            order_id: order.id,
-            receipt: order.receipt,
-            handler: async (response) => {
-                try {
-                    const { data } = await axios.post(
-                        `${backendUrl}/api/user/verifyRazorpay`,
-                        response,
-                        { headers: { token } }
-                    );
-                    if (data.success) {
-                        navigate('/my-appointments');
-                        getUserAppointments();
-                    }
-                } catch (error) {
-                    console.error(error);
-                    toast.error(error.message);
+            let timeSlots = [];
+
+            while (currentDate < endTime) {
+                let formattedTime = currentDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                let day = currentDate.getDate()
+                let month = currentDate.getMonth() + 1
+                let year = currentDate.getFullYear()
+
+                const slotDate = day + "_" + month + "_" + year
+                const slotTime = formattedTime
+
+                const isSlotAvailable = docInfo.slots_booked[slotDate] && docInfo.slots_booked[slotDate].includes(slotTime) ? false : true
+
+                if (isSlotAvailable) {
+                    timeSlots.push({
+                        datetime: new Date(currentDate),
+                        time: formattedTime
+                    })
                 }
-            },
-            theme: {
-                color: '#4f46e5'
-            }
-        };
-        const rzp = new window.Razorpay(options);
-        rzp.open();
-    };
 
-    const appointmentRazorpay = async (appointmentId) => {
+                currentDate.setMinutes(currentDate.getMinutes() + 30);
+            }
+
+            setDocSlots(prev => ([...prev, timeSlots]))
+        }
+    }
+
+    const bookAppointment = async () => {
+        if (!token) {
+            toast.warning('Please login to book an appointment')
+            return navigate('/login')
+        }
+
+        const date = docSlots[slotIndex][0].datetime
+
+        let day = date.getDate()
+        let month = date.getMonth() + 1
+        let year = date.getFullYear()
+
+        const slotDate = day + "_" + month + "_" + year
+
         try {
-            const { data } = await axios.post(
-                `${backendUrl}/api/user/payment-razorpay`,
-                { appointmentId },
-                { headers: { token } }
-            );
+            const { data } = await axios.post(backendUrl + '/api/user/book-appointment', { docId, slotDate, slotTime }, { headers: { token } })
             if (data.success) {
-                initPay(data.order);
+                toast.success(data.message)
+                getDoctosData()
+                navigate('/my-appointments')
             } else {
-                toast.error(data.message);
+                toast.error(data.message)
             }
         } catch (error) {
-            console.error(error);
-            toast.error(error.message);
+            console.log(error)
+            toast.error(error.message)
         }
-    };
-
-    const appointmentStripe = async (appointmentId) => {
-        try {
-            const { data } = await axios.post(
-                `${backendUrl}/api/user/payment-stripe`,
-                { appointmentId },
-                { headers: { token } }
-            );
-            if (data.success) {
-                const { session_url } = data;
-                window.location.replace(session_url);
-            } else {
-                toast.error(data.message);
-            }
-        } catch (error) {
-            console.error(error);
-            toast.error(error.message);
-        }
-    };
+    }
 
     useEffect(() => {
-        if (token) {
-            getUserAppointments();
+        if (doctors.length > 0) {
+            fetchDocInfo()
         }
-    }, [token]);
+    }, [doctors, docId])
+
+    useEffect(() => {
+        if (docInfo) {
+            getAvailableSolts()
+        }
+    }, [docInfo])
 
     if (isLoading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-white">
-                <div className="text-center">
-                    <div className="relative w-24 h-24 mx-auto mb-6">
-                        <div className="absolute inset-0 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                        <div className="absolute inset-4 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin animation-delay-200"></div>
-                    </div>
-                    <h3 className="text-xl font-medium text-gray-700">Loading your appointments</h3>
-                    <p className="text-gray-500 mt-2">We're fetching your medical history</p>
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-white">
+                <div className="animate-pulse flex flex-col items-center">
+                    <div className="w-32 h-32 bg-blue-200 rounded-full mb-4"></div>
+                    <div className="h-6 bg-blue-200 rounded w-64 mb-2"></div>
+                    <div className="h-4 bg-blue-200 rounded w-48"></div>
                 </div>
             </div>
-        );
+        )
     }
 
-    return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white py-12 px-4 sm:px-6 lg:px-8">
-            {/* Decorative elements */}
+    return docInfo ? (
+        <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5 }}
+            className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12"
+        >
+            {/* Background decorations */}
             <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
-                <div className="absolute top-20 left-20 w-64 h-64 bg-blue-100 rounded-full filter blur-[100px] opacity-10"></div>
-                <div className="absolute bottom-20 right-20 w-80 h-80 bg-cyan-100 rounded-full filter blur-[120px] opacity-10"></div>
+                <div className="absolute top-0 right-0 w-64 h-64 bg-blue-100 rounded-full filter blur-3xl opacity-10"></div>
+                <div className="absolute bottom-0 left-0 w-96 h-96 bg-cyan-100 rounded-full filter blur-3xl opacity-10"></div>
             </div>
 
-            <div className="max-w-6xl mx-auto relative z-10">
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
+            {/* Doctor Details Section */}
+            <div className="relative z-10 flex flex-col lg:flex-row gap-8 mb-16">
+                {/* Doctor Image */}
+                <motion.div 
+                    initial={{ x: -20, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
                     transition={{ duration: 0.5 }}
-                    className="mb-12 text-center"
+                    className="lg:w-1/3"
                 >
-                    <h1 className="text-4xl font-bold text-gray-900 mb-3">
-                        <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-cyan-500">
-                            My Appointments
-                        </span>
-                    </h1>
-                    <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-                        Manage your upcoming consultations and view past medical visits
-                    </p>
+                    <div className="relative group">
+                        <div className="absolute inset-0 bg-gradient-to-br from-blue-400 to-cyan-400 rounded-2xl opacity-0 group-hover:opacity-20 blur-md transition-all duration-300"></div>
+                        <img 
+                            className="w-full h-auto rounded-2xl shadow-xl border-4 border-white transform group-hover:-translate-y-1 transition-transform duration-300" 
+                            src={docInfo.image} 
+                            alt={docInfo.name} 
+                        />
+                        <div className="absolute -bottom-4 -right-4 bg-white rounded-full p-2 shadow-lg">
+                            <img className="w-8 h-8" src={assets.verified_icon} alt="Verified" />
+                        </div>
+                    </div>
                 </motion.div>
 
-                {appointments.length === 0 ? (
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ duration: 0.3 }}
-                        className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden max-w-md mx-auto"
-                    >
-                        <div className="p-8 text-center">
-                            <div className="w-48 h-48 mx-auto mb-6">
-                                <img src={assets.empty_appointments} alt="No appointments" className="w-full h-full object-contain" />
-                            </div>
-                            <h3 className="text-xl font-medium text-gray-800 mb-2">No appointments scheduled</h3>
-                            <p className="text-gray-500 mb-6">You haven't booked any medical consultations yet</p>
-                            <motion.button
-                                whileHover={{ scale: 1.02 }}
-                                whileTap={{ scale: 0.98 }}
-                                onClick={() => navigate('/doctors')}
-                                className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-medium rounded-lg shadow-lg hover:shadow-xl transition-all"
-                            >
-                                Find a Specialist
-                                <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                                </svg>
-                            </motion.button>
+                {/* Doctor Info */}
+                <motion.div 
+                    initial={{ x: 20, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={{ duration: 0.5, delay: 0.1 }}
+                    className="lg:w-2/3 bg-white rounded-2xl shadow-lg border border-gray-100 p-8"
+                >
+                    <div className="flex flex-col space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h1 className="text-3xl font-bold text-gray-800">
+                                {docInfo.name}
+                                <span className="ml-2 inline-block align-middle">
+                                    <img className="w-5 h-5" src={assets.verified_icon} alt="Verified" />
+                                </span>
+                            </h1>
+                            <span className="px-3 py-1 bg-blue-100 text-blue-800 text-sm font-medium rounded-full">
+                                {docInfo.experience} years experience
+                            </span>
                         </div>
-                    </motion.div>
-                ) : (
-                    <div className="space-y-6">
-                        {appointments.map((item, index) => (
-                            <motion.div
-                                key={item._id}
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: index * 0.05, duration: 0.3 }}
-                                className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden transition-all hover:shadow-xl"
-                            >
-                                <div 
-                                    className="p-6 cursor-pointer"
-                                    onClick={() => setExpandedAppointment(expandedAppointment === index ? null : index)}
-                                >
-                                    <div className="flex items-start">
-                                        {/* Doctor Avatar */}
-                                        <div className="relative flex-shrink-0 mr-6">
-                                            <div className="relative w-20 h-20 rounded-xl overflow-hidden border-2 border-white shadow-md">
-                                                <img 
-                                                    src={item.docData.image} 
-                                                    alt={item.docData.name}
-                                                    className="w-full h-full object-cover"
-                                                />
-                                                <div className="absolute inset-0 bg-gradient-to-br from-transparent to-transparent via-blue-500/10"></div>
-                                            </div>
-                                            {item.isCompleted && (
-                                                <div className="absolute -top-2 -right-2 bg-green-100 text-green-800 text-xs font-semibold px-2 py-1 rounded-full flex items-center shadow-sm">
-                                                    <FiCheckCircle className="mr-1" size={12} />
-                                                    Completed
-                                                </div>
-                                            )}
-                                            {item.cancelled && (
-                                                <div className="absolute -top-2 -right-2 bg-red-100 text-red-800 text-xs font-semibold px-2 py-1 rounded-full flex items-center shadow-sm">
-                                                    <FiXCircle className="mr-1" size={12} />
-                                                    Cancelled
-                                                </div>
-                                            )}
-                                        </div>
 
-                                        {/* Appointment Info */}
-                                        <div className="flex-1">
-                                            <div className="flex justify-between items-start">
-                                                <div>
-                                                    <h3 className="text-xl font-bold text-gray-800">{item.docData.name}</h3>
-                                                    <p className="text-blue-600 font-medium">{item.docData.speciality}</p>
-                                                </div>
-                                                {item.payment && !item.cancelled && (
-                                                    <div className="flex items-center bg-green-50 text-green-700 px-3 py-1 rounded-full text-sm">
-                                                        <FiDollarSign className="mr-1" size={14} />
-                                                        Paid
-                                                    </div>
-                                                )}
-                                            </div>
+                        <p className="text-xl text-blue-600 font-medium">
+                            {docInfo.degree} - {docInfo.speciality}
+                        </p>
 
-                                            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                <div className="flex items-center text-gray-600">
-                                                    <FiCalendar className="mr-2 text-blue-500" size={18} />
-                                                    <span>{slotDateFormat(item.slotDate)}</span>
-                                                </div>
-                                                <div className="flex items-center text-gray-600">
-                                                    <FiClock className="mr-2 text-cyan-500" size={18} />
-                                                    <span>{item.slotTime}</span>
-                                                </div>
-                                                <div className="flex items-center text-gray-600">
-                                                    <FiMapPin className="mr-2 text-purple-500" size={18} />
-                                                    <span>{item.docData.address.line1}</span>
-                                                </div>
-                                            </div>
-                                        </div>
+                        <div className="py-4 border-t border-b border-gray-100">
+                            <h3 className="flex items-center text-lg font-semibold text-gray-700 mb-2">
+                                <img className="w-5 h-5 mr-2" src={assets.info_icon} alt="About" />
+                                About Doctor
+                            </h3>
+                            <p className="text-gray-600 leading-relaxed">
+                                {docInfo.about}
+                            </p>
+                        </div>
 
-                                        <div className="ml-4 flex-shrink-0">
-                                            <motion.div
-                                                animate={{ rotate: expandedAppointment === index ? 180 : 0 }}
-                                                transition={{ duration: 0.2 }}
-                                            >
-                                                <FiChevronDown className="text-gray-400" size={20} />
-                                            </motion.div>
-                                        </div>
-                                    </div>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-sm text-gray-500">Consultation Fee</p>
+                                <p className="text-2xl font-bold text-blue-600">
+                                    {currencySymbol}{docInfo.fees}
+                                </p>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <div className="flex items-center text-yellow-400">
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                        <svg key={star} className="w-5 h-5 fill-current" viewBox="0 0 20 20">
+                                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                        </svg>
+                                    ))}
                                 </div>
+                                <span className="text-gray-500 text-sm">(245 reviews)</span>
+                            </div>
+                        </div>
+                    </div>
+                </motion.div>
+            </div>
 
-                                {/* Expanded Content */}
-                                <AnimatePresence>
-                                    {expandedAppointment === index && (
-                                        <motion.div
-                                            initial={{ opacity: 0, height: 0 }}
-                                            animate={{ opacity: 1, height: 'auto' }}
-                                            exit={{ opacity: 0, height: 0 }}
-                                            transition={{ duration: 0.3 }}
-                                            className="px-6 pb-6"
-                                        >
-                                            <div className="border-t border-gray-100 pt-6">
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                                    <div>
-                                                        <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                                                            Clinic Information
-                                                        </h4>
-                                                        <p className="text-gray-700 mb-2">
-                                                            <span className="font-medium">Address:</span> {item.docData.address.line1}, {item.docData.address.line2}
-                                                        </p>
-                                                        <p className="text-gray-700">
-                                                            <span className="font-medium">Contact:</span> {item.docData.contact || 'Not provided'}
-                                                        </p>
-                                                    </div>
-
-                                                    <div>
-                                                        <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                                                            Appointment Details
-                                                        </h4>
-                                                        <p className="text-gray-700 mb-2">
-                                                            <span className="font-medium">Status:</span> {item.isCompleted ? 'Completed' : item.cancelled ? 'Cancelled' : 'Upcoming'}
-                                                        </p>
-                                                        <p className="text-gray-700">
-                                                            <span className="font-medium">Payment:</span> {item.payment ? 'Completed' : 'Pending'}
-                                                        </p>
-                                                    </div>
-                                                </div>
-
-                                                {/* Action Buttons */}
-                                                <div className="mt-6 flex flex-wrap gap-3">
-                                                    {!item.cancelled && !item.payment && !item.isCompleted && payment !== item._id && (
-                                                        <motion.button
-                                                            whileHover={{ scale: 1.03 }}
-                                                            whileTap={{ scale: 0.97 }}
-                                                            onClick={() => setPayment(item._id)}
-                                                            className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-cyan-500 text-white rounded-lg shadow-md hover:shadow-lg transition-all"
-                                                        >
-                                                            Pay Consultation Fee
-                                                        </motion.button>
-                                                    )}
-
-                                                    {!item.cancelled && !item.payment && !item.isCompleted && payment === item._id && (
-                                                        <div className="flex flex-wrap gap-3">
-                                                            <motion.button
-                                                                whileHover={{ scale: 1.03 }}
-                                                                whileTap={{ scale: 0.97 }}
-                                                                onClick={() => appointmentStripe(item._id)}
-                                                                className="px-5 py-2.5 bg-white border border-gray-200 rounded-lg shadow-sm hover:bg-gray-50 transition-colors flex items-center"
-                                                            >
-                                                                <img 
-                                                                    src={assets.stripe_logo} 
-                                                                    alt="Stripe" 
-                                                                    className="h-5"
-                                                                />
-                                                                <span className="ml-2 text-gray-700">Pay with Stripe</span>
-                                                            </motion.button>
-                                                            <motion.button
-                                                                whileHover={{ scale: 1.03 }}
-                                                                whileTap={{ scale: 0.97 }}
-                                                                onClick={() => appointmentRazorpay(item._id)}
-                                                                className="px-5 py-2.5 bg-white border border-gray-200 rounded-lg shadow-sm hover:bg-gray-50 transition-colors flex items-center"
-                                                            >
-                                                                <img 
-                                                                    src={assets.razorpay_logo} 
-                                                                    alt="Razorpay" 
-                                                                    className="h-5"
-                                                                />
-                                                                <span className="ml-2 text-gray-700">Pay with Razorpay</span>
-                                                            </motion.button>
-                                                        </div>
-                                                    )}
-
-                                                    {!item.cancelled && !item.isCompleted && (
-                                                        <motion.button
-                                                            whileHover={{ scale: 1.03 }}
-                                                            whileTap={{ scale: 0.97 }}
-                                                            onClick={() => cancelAppointment(item._id)}
-                                                            className="px-5 py-2.5 bg-white border border-red-500 text-red-500 rounded-lg hover:bg-red-50 transition-colors"
-                                                        >
-                                                            Cancel Appointment
-                                                        </motion.button>
-                                                    )}
-
-                                                    {item.isCompleted && (
-                                                        <button className="px-5 py-2.5 bg-white border border-green-500 text-green-500 rounded-lg cursor-default">
-                                                            Consultation Completed
-                                                        </button>
-                                                    )}
-
-                                                    {item.cancelled && (
-                                                        <button className="px-5 py-2.5 bg-white border border-gray-300 text-gray-500 rounded-lg cursor-default">
-                                                            Appointment Cancelled
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
+            {/* Booking Section */}
+            <motion.div 
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ duration: 0.5, delay: 0.2 }}
+                className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 mb-16"
+            >
+                <h2 className="text-2xl font-bold text-gray-800 mb-6">Book Your Appointment</h2>
+                
+                {/* Date Selection */}
+                <div className="mb-8">
+                    <h3 className="text-lg font-semibold text-gray-700 mb-4">Select Date</h3>
+                    <div className="flex space-x-4 overflow-x-auto pb-4">
+                        {docSlots.length > 0 && docSlots.map((item, index) => (
+                            <motion.div 
+                                key={index}
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => setSlotIndex(index)}
+                                className={`flex flex-col items-center justify-center min-w-20 p-4 rounded-xl cursor-pointer transition-all ${slotIndex === index ? 'bg-gradient-to-br from-blue-500 to-cyan-400 text-white shadow-lg' : 'bg-gray-50 hover:bg-gray-100 border border-gray-200'}`}
+                            >
+                                <span className="font-medium">{item[0] && daysOfWeek[item[0].datetime.getDay()]}</span>
+                                <span className="text-2xl font-bold">{item[0] && item[0].datetime.getDate()}</span>
+                                <span className="text-xs opacity-80">{item[0] && item[0].datetime.toLocaleString('default', { month: 'short' })}</span>
                             </motion.div>
                         ))}
                     </div>
-                )}
-            </div>
-        </div>
-    );
-};
+                </div>
 
-export default MyAppointments;
+                {/* Time Slot Selection */}
+                <div className="mb-8">
+                    <h3 className="text-lg font-semibold text-gray-700 mb-4">Available Time Slots</h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                        {docSlots.length > 0 && docSlots[slotIndex].map((item, index) => (
+                            <motion.div
+                                key={index}
+                                whileHover={{ scale: 1.05 }}
+                                onClick={() => setSlotTime(item.time)}
+                                className={`p-3 rounded-lg text-center cursor-pointer transition-all ${item.time === slotTime ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-50 hover:bg-gray-100 border border-gray-200'}`}
+                            >
+                                {item.time.toLowerCase()}
+                            </motion.div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Book Button */}
+                <div className="flex justify-center">
+                    <motion.button
+                        whileHover={{ scale: 1.03 }}
+                        whileTap={{ scale: 0.97 }}
+                        onClick={bookAppointment}
+                        disabled={!slotTime}
+                        className={`px-12 py-4 rounded-full text-lg font-medium shadow-lg transition-all ${slotTime ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white hover:shadow-xl' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
+                    >
+                        Confirm Appointment
+                        <svg className="w-5 h-5 ml-2 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                    </motion.button>
+                </div>
+            </motion.div>
+
+            {/* Related Doctors */}
+            <RelatedDoctors speciality={docInfo.speciality} docId={docId} />
+        </motion.div>
+    ) : null
+}
+
+export default Appointment
