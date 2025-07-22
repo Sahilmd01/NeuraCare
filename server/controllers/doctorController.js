@@ -32,3 +32,40 @@ const loginDoctor = async (req, res) => {
 }
 
 // API to get doctor appointments for doctor panel
+const appointmentsDoctor = async (req, res) => {
+    try {
+
+        const { docId } = req.body
+        const appointments = await appointmentModel.find({ docId })
+
+        res.json({ success: true, appointments })
+
+    } catch (error) {
+        console.log(error)
+        res.json({ success: false, message: error.message })
+    }
+}
+
+// API to cancel appointment for doctor panel
+const appointmentCancel = async (req, res) => {
+    try {
+
+        const { docId, appointmentId } = req.body
+
+        const appointmentData = await appointmentModel.findById(appointmentId)
+        if (appointmentData && appointmentData.docId === docId) {
+            await appointmentModel.findByIdAndUpdate(appointmentId, { cancelled: true })
+            return res.json({ success: true, message: 'Appointment Cancelled' })
+        }
+
+        res.json({ success: false, message: 'Appointment Cancelled' })
+
+    } catch (error) {
+        console.log(error)
+        res.json({ success: false, message: error.message })
+    }
+
+}
+
+// API to mark appointment completed for doctor panel
+c
