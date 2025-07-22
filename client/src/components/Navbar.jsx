@@ -35,7 +35,7 @@ const Navbar = () => {
 
   const userMenu = [
     { path: "/my-profile", label: "My Profile", icon: FaUser },
-    { path: "/my-appointment", label: "My Appointments", icon: FaCalendarAlt },
+    { path: "/my-appointments", label: "My Appointments", icon: FaCalendarAlt },
     { label: "Logout", icon: FaSignOutAlt, action: logout, isLogout: true }
   ];
 
